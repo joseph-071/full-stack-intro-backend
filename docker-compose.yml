@@ -9,23 +9,47 @@ services:
     volumes:
       - .:/app
     environment:
-      - DATABASE_URL=postgresql://notes_user:notes_pass@postgres:5432/notes_db
+      # 這裡的帳密與資料庫名需與下方 postgres 一致
+      - DATABASE_URL=postgresql://admin:password123@postgres:5432/notes_db
       - PYTHONUNBUFFERED=1
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
   postgres:
     image: postgres:15-alpine
     container_name: notes-db
     environment:
-      POSTGRES_USER: notes_user
-      POSTGRES_PASSWORD: notes_pass
+      # 帳密： admin / password123
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
       POSTGRES_DB: notes_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # 這裡的 -U 必須跟上面的 POSTGRES_USER 一致，-d 跟 POSTGRES_DB 一致
+      test: ["CMD-SHELL", "pg_isready -U admin -d notes_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: notes-pgadmin
+    environment:
+      # pgAdmin 登入用的 Email 與密碼
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: password123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
 
 volumes:
   postgres_data:
+  pgadmin_data:
