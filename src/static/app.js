@@ -1,7 +1,13 @@
 const DEFAULT_USER_ID = 1;
 const API_BASE = "/notes";
+const TOKEN_STORAGE_KEY = "notes_oauth_token";
+const PROVIDER_STORAGE_KEY = "notes_oauth_provider";
+const OAUTH_USER_STORAGE_KEY = "notes_oauth_user_id";
 
 const noteList = document.querySelector("#note-list");
+const authForm = document.querySelector("#auth-form");
+const oauthProviderSelect = document.querySelector("#oauth-provider");
+const oauthUserIdInput = document.querySelector("#oauth-user-id");
 const newNoteButton = document.querySelector("#new-note-button");
 const saveNoteButton = document.querySelector("#save-note-button");
 const deleteNoteButton = document.querySelector("#delete-note-button");
@@ -10,6 +16,9 @@ const contentInput = document.querySelector("#note-content");
 const editorStatus = document.querySelector("#editor-status");
 
 let currentNoteId = null;
+let oauthProvider = getInitialProvider();
+let oauthUserId = getInitialOAuthUserId();
+let accessToken = getInitialAccessToken();
 const currentUserId = getInitialUserId();
 
 function getInitialUserId() {
@@ -18,12 +27,51 @@ function getInitialUserId() {
   return Number.isInteger(userId) && userId > 0 ? userId : DEFAULT_USER_ID;
 }
 
+function getInitialProvider() {
+  return localStorage.getItem(PROVIDER_STORAGE_KEY) || "google";
+}
+
+function getInitialOAuthUserId() {
+  const storedUserId = Number(localStorage.getItem(OAUTH_USER_STORAGE_KEY));
+  return Number.isInteger(storedUserId) && storedUserId > 0
+    ? storedUserId
+    : getInitialUserId();
+}
+
+function buildDemoProviderToken(provider = oauthProvider) {
+  return `${provider}:user:${oauthUserId}`;
+}
+
+function getInitialAccessToken() {
+  return localStorage.getItem(TOKEN_STORAGE_KEY) || buildDemoProviderToken();
+}
+
+function getAuthUserLabel() {
+  if (accessToken?.includes(":user:")) {
+    return accessToken.split(":user:").at(-1);
+  }
+
+  if (accessToken?.startsWith("user:")) {
+    return accessToken.slice(5);
+  }
+
+  return currentUserId;
+}
+
 function withUserId(path = "") {
   return `${API_BASE}${path}?user_id=${currentUserId}`;
 }
 
+function withAuth(path = "") {
+  return accessToken ? `${API_BASE}${path}` : withUserId(path);
+}
+
 function setStatus(message) {
   editorStatus.textContent = message;
+}
+
+function getProviderLabel() {
+  return oauthProvider === "github" ? "GitHub" : "Google";
 }
 
 function setDeleteEnabled(enabled) {
@@ -47,6 +95,10 @@ async function requestJson(url, options = {}) {
     "Content-Type": "application/json",
     ...(options.headers || {}),
   };
+
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
 
   options.headers = headers;
   const response = await fetch(url, options);
@@ -78,7 +130,7 @@ async function renderSidebar(selectedId = currentNoteId) {
   noteList.appendChild(loadingState);
 
   try {
-    const data = await requestJson(withUserId());
+    const data = await requestJson(withAuth());
     const notes = data.items || [];
     noteList.textContent = "";
 
@@ -124,12 +176,12 @@ async function loadNote(noteId) {
   setStatus("Loading...");
 
   try {
-    const note = await requestJson(withUserId(`/${noteId}`));
+    const note = await requestJson(withAuth(`/${noteId}`));
     currentNoteId = note.note_id;
     titleInput.value = note.title;
     contentInput.value = note.content;
     setDeleteEnabled(true);
-    setStatus(`Loaded note ${note.note_id} for user ${currentUserId}`);
+    setStatus(`Loaded note ${note.note_id} for user ${getAuthUserLabel()}`);
     await renderSidebar(currentNoteId);
   } catch (error) {
     setStatus(error.message);
@@ -146,7 +198,7 @@ function getEditorPayload() {
 async function saveNote() {
   const payload = getEditorPayload();
   const isNewNote = currentNoteId === null;
-  const url = isNewNote ? withUserId() : withUserId(`/${currentNoteId}`);
+  const url = isNewNote ? withAuth() : withAuth(`/${currentNoteId}`);
   const method = isNewNote ? "POST" : "PATCH";
 
   saveNoteButton.disabled = true;
@@ -161,7 +213,7 @@ async function saveNote() {
     titleInput.value = savedNote.title;
     contentInput.value = savedNote.content;
     setDeleteEnabled(true);
-    setStatus(`Saved for user ${currentUserId}`);
+    setStatus(`Saved for user ${getAuthUserLabel()}`);
     await renderSidebar(currentNoteId);
   } catch (error) {
     setStatus(error.message);
@@ -184,7 +236,7 @@ async function deleteCurrentNote() {
   setStatus("Deleting...");
 
   try {
-    await requestJson(withUserId(`/${currentNoteId}`), { method: "DELETE" });
+    await requestJson(withAuth(`/${currentNoteId}`), { method: "DELETE" });
     clearEditor("Deleted. Select or create a note.");
     await renderSidebar(null);
   } catch (error) {
@@ -205,9 +257,26 @@ noteList.addEventListener("click", async (event) => {
 newNoteButton.addEventListener("click", () => clearEditor("New note"));
 saveNoteButton.addEventListener("click", saveNote);
 deleteNoteButton.addEventListener("click", deleteCurrentNote);
+authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  oauthProvider = oauthProviderSelect.value;
+  const requestedUserId = Number(oauthUserIdInput.value);
+  oauthUserId = Number.isInteger(requestedUserId) && requestedUserId > 0
+    ? requestedUserId
+    : DEFAULT_USER_ID;
+  accessToken = buildDemoProviderToken(oauthProvider);
+  localStorage.setItem(PROVIDER_STORAGE_KEY, oauthProvider);
+  localStorage.setItem(OAUTH_USER_STORAGE_KEY, String(oauthUserId));
+  localStorage.setItem(TOKEN_STORAGE_KEY, accessToken);
+
+  clearEditor(`Signed in with ${getProviderLabel()} as user ${getAuthUserLabel()}`);
+  await renderSidebar();
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
+  oauthProviderSelect.value = oauthProvider;
+  oauthUserIdInput.value = String(oauthUserId);
   setDeleteEnabled(false);
-  setStatus(`Viewing notes for user ${currentUserId}`);
+  setStatus(`Signed in with ${getProviderLabel()} as user ${getAuthUserLabel()}`);
   await renderSidebar();
 });

@@ -23,6 +23,21 @@
         <div class="editor-toolbar">
           <span id="editor-status" class="editor-status">Select or create a note</span>
           <div class="actions">
+            <form id="auth-form" class="auth-panel">
+              <select id="oauth-provider" class="auth-input" aria-label="OAuth provider">
+                <option value="google">Google</option>
+                <option value="github">GitHub</option>
+              </select>
+              <input
+                id="oauth-user-id"
+                class="auth-input auth-user-input"
+                type="number"
+                min="1"
+                value="1"
+                aria-label="OAuth user ID"
+              />
+              <button class="auth-button" type="submit">Sign in</button>
+            </form>
             <button id="save-note-button" class="primary-button" type="button">Save</button>
             <button id="delete-note-button" class="danger-button" type="button">Delete</button>
           </div>

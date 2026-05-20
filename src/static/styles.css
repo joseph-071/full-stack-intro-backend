@@ -85,6 +85,47 @@ button {
   background: #eeeeec;
 }
 
+.auth-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.auth-input {
+  min-width: 112px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.auth-user-input {
+  min-width: 72px;
+  width: 72px;
+}
+
+.auth-input:focus {
+  border-color: #c7c7c5;
+  outline: 3px solid var(--focus);
+}
+
+.auth-button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 650;
+  padding: 0 12px;
+}
+
+.auth-button:hover {
+  background: var(--accent-hover);
+}
+
 .note-list {
   display: flex;
   flex: 1;
@@ -266,6 +307,10 @@ button {
   .actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .auth-panel {
+    grid-column: 1 / -1;
   }
 
   .title-input {
