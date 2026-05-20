@@ -126,6 +126,109 @@ button {
   background: var(--accent-hover);
 }
 
+.sidebar-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.search-input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.search-input:focus {
+  border-color: #c7c7c5;
+  outline: 3px solid var(--focus);
+}
+
+.archived-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.note-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px clamp(20px, 5vw, 72px);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.meta-button {
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0 10px;
+}
+
+.meta-button:hover {
+  border-color: #c7c7c5;
+  background: #eeeeec;
+  color: var(--text);
+}
+
+.meta-button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.emotion-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.emotion-select {
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  padding: 0 8px;
+}
+
+.emotion-select:focus {
+  border-color: #c7c7c5;
+  outline: 3px solid var(--focus);
+}
+
+.note-item.is-pinned .note-title::before {
+  content: "📌 ";
+  font-size: 11px;
+}
+
+.note-item.is-archived {
+  opacity: 0.5;
+}
+
+.note-item.is-archived .note-title::after {
+  content: " 🗂";
+  font-size: 11px;
+}
+
 .note-list {
   display: flex;
   flex: 1;
@@ -316,5 +419,13 @@ button {
   .title-input {
     margin-top: 28px;
     font-size: 34px;
+  }
+
+  .note-meta {
+    padding: 10px 16px;
+  }
+
+  .emotion-label {
+    margin-left: 0;
   }
 }
