@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from src.schemas.note import NoteCreate, NoteListResponse, NoteRead, NoteUpdate
+from src.schemas.note import EmotionType, NoteCreate, NoteListResponse, NoteRead, NoteUpdate
 
 
 def test_note_create_valid():
@@ -35,6 +35,9 @@ def test_note_read_requires_positive_id():
 			title="Hello",
 			content="World",
 			note_date=date(2026, 5, 3),
+			is_pinned=False,
+			is_archived=False,
+			emotion=None,
 		)
 
 
@@ -56,6 +59,33 @@ def test_note_list_response_accepts_items():
 		title="Hello",
 		content="World",
 		note_date=date(2026, 5, 3),
+		is_pinned=False,
+		is_archived=False,
+		emotion=None,
 	)
 	response = NoteListResponse(items=[note])
 	assert response.items[0].note_id == 1
+
+
+def test_note_read_invalid_note_date():
+	with pytest.raises(ValidationError):
+		NoteRead(
+			note_id=1,
+			user_id=1,
+			title="Hello",
+			content="World",
+			note_date="not-a-date",
+			is_pinned=False,
+			is_archived=False,
+			emotion=None,
+		)
+
+
+def test_note_create_accepts_valid_emotion():
+	payload = NoteCreate(title="Hello", content="World", emotion="happy")
+	assert payload.emotion == EmotionType.happy
+
+
+def test_note_create_rejects_invalid_emotion():
+	with pytest.raises(ValidationError):
+		NoteCreate(title="Hello", content="World", emotion="confused")

@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from src.models.note import Note
@@ -36,22 +37,35 @@ def get_note_or_404(db: Session, note_id: int, user_id: int) -> Note:
 def create_note(db: Session, user_id: int, payload: NoteCreate) -> Note:
     get_user_or_404(db, user_id)
 
-    note = Note(user_id=user_id, title=payload.title, content=payload.content)
+    note = Note(user_id=user_id, **payload.model_dump())
     db.add(note)
     db.commit()
     db.refresh(note)
     return note
 
 
-def list_notes(db: Session, user_id: int) -> list[Note]:
+def list_notes(
+    db: Session,
+    user_id: int,
+    q: str | None = None,
+    include_archived: bool = False,
+) -> list[Note]:
     get_user_or_404(db, user_id)
 
-    return (
-        db.query(Note)
-        .filter(Note.user_id == user_id)
-        .order_by(Note.note_id.desc())
-        .all()
-    )
+    query = db.query(Note).filter(Note.user_id == user_id)
+
+    if not include_archived:
+        query = query.filter(Note.is_archived == False)  # noqa: E712
+
+    if q:
+        query = query.filter(
+            or_(
+                Note.title.ilike(f"%{q}%"),
+                Note.content.ilike(f"%{q}%"),
+            )
+        )
+
+    return query.order_by(Note.is_pinned.desc(), Note.note_id.desc()).all()
 
 
 def get_note(db: Session, note_id: int, user_id: int) -> Note:

@@ -87,9 +87,13 @@ def create_note(
 @router.get("", response_model=NoteListResponse)
 def list_notes(
     user_id: int = Depends(get_current_user_id),
+    q: str | None = Query(None, description="Keyword search on title and content"),
+    include_archived: bool = Query(False, description="Include archived notes"),
     db: Session = Depends(get_db),
 ):
-    notes = note_service.list_notes(db=db, user_id=user_id)
+    notes = note_service.list_notes(
+        db=db, user_id=user_id, q=q, include_archived=include_archived
+    )
     return NoteListResponse(items=notes)
 
 

@@ -12,7 +12,7 @@ class Note(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
  """
 
-from sqlalchemy import BigInteger, Column, Date, ForeignKey, String, Text, text
+from sqlalchemy import BigInteger, Boolean, Column, Date, ForeignKey, String, Text, text
 from src.config.database import Base
 
 
@@ -29,4 +29,7 @@ class Note(Base):
     )
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
-    note_date = Column(Date, nullable=False, server_default=text("CURRENT_DATE"))
+    note_date   = Column(Date, nullable=False, server_default=text("CURRENT_DATE"))
+    is_pinned   = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    is_archived = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    emotion     = Column(String(50), nullable=True)

@@ -177,6 +177,58 @@ def test_update_note_updates_fields():
 	db.refresh.assert_called_once_with(note)
 
 
+def test_update_note_updates_title_and_content():
+    user = User(user_id=1, user_name="A", user_email="a@example.com")
+    note = Note(
+        note_id=1,
+        user_id=1,
+        title="Old Title",
+        content="old content",
+        note_date=date(2026, 5, 3),
+    )
+    user_query = make_query(first=user)
+    note_query = make_query(first=note)
+    db = MagicMock(spec=Session)
+    db.query = MagicMock(side_effect=[user_query, note_query])
+
+    payload = NoteUpdate(title="New Title", content="New Content")
+    result = note_service.update_note(db=db, note_id=1, user_id=1, payload=payload)
+
+    assert result is note
+    assert note.title == "New Title"
+    assert note.content == "New Content"
+    db.commit.assert_called_once()
+    db.refresh.assert_called_once_with(note)
+
+
+def test_list_notes_excludes_archived_by_default():
+    user = User(user_id=1, user_name="A", user_email="a@example.com")
+    notes = [Note(note_id=1, user_id=1, title="A", content="text", note_date=date(2026, 5, 3))]
+    user_query = make_query(first=user)
+    note_query = make_query(all_=notes)
+    db = MagicMock(spec=Session)
+    db.query = MagicMock(side_effect=[user_query, note_query])
+
+    result = note_service.list_notes(db=db, user_id=1)
+
+    assert result == notes
+    # filter called twice: once for user_id, once for is_archived == False
+    assert note_query.filter.call_count == 2
+
+
+def test_list_notes_with_keyword_applies_extra_filter():
+    user = User(user_id=1, user_name="A", user_email="a@example.com")
+    user_query = make_query(first=user)
+    note_query = make_query(all_=[])
+    db = MagicMock(spec=Session)
+    db.query = MagicMock(side_effect=[user_query, note_query])
+
+    note_service.list_notes(db=db, user_id=1, q="hello", include_archived=True)
+
+    # filter called twice: once for user_id, once for keyword (archived skipped)
+    assert note_query.filter.call_count == 2
+
+
 def test_delete_note_deletes_and_commits():
 	user = User(user_id=1, user_name="A", user_email="a@example.com")
 	note = Note(
