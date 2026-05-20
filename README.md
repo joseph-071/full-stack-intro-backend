@@ -179,8 +179,16 @@ GET /notes?include_archived=true  # 同時回傳封存筆記
 
 ### 功能
 
-- **左側欄**：顯示目前登入使用者的筆記列表，點擊可載入筆記。
+- **左側欄**：
+  - 顯示目前登入使用者的筆記列表，點擊可載入筆記。
+  - 釘選筆記在列表中置頂，並以 📌 前綴標示；封存筆記以 🗂 後綴標示並淡化顯示。
+  - **搜尋列**：即時輸入關鍵字（300 ms debounce），透過 `?q=` 參數呼叫後端過濾。
+  - **顯示封存** checkbox：勾選後於請求加上 `?include_archived=true`，讓封存筆記出現在列表中。
 - **右側編輯區**：標題、內容輸入，支援新增、儲存、刪除。
+- **筆記元資料列（note-meta bar）**：載入筆記後顯示於編輯器頂部，提供：
+  - **📌 Pin / Pinned** 按鈕：立即 PATCH `is_pinned`，切換釘選狀態。
+  - **🗂 Archive / Archived** 按鈕：立即 PATCH `is_archived`，封存後從列表移除並清空編輯器。
+  - **Mood** 下拉選單：選擇情緒標籤（`😊 Happy / 🤩 Excited / 😐 Neutral / 😢 Sad / 😠 Angry`），於存檔時一併送出。
 - **工具列 Sign-in 面板**：
   - 下拉選單選擇 OAuth Provider（Google / GitHub）
   - 數字輸入框指定 Demo User ID
@@ -197,6 +205,49 @@ GET /notes?include_archived=true  # 同時回傳封存筆記
 ---
 
 ## 本次更新紀錄
+
+### Commit 4 — 前端 UI 控件（搜尋、釘選、封存、情緒）
+
+**異動檔案：** `src/static/index.html`、`src/static/styles.css`、`src/static/app.js`
+
+#### `src/static/index.html`
+
+- 側邊欄新增 `#search-input`（搜尋列）與 `#show-archived` checkbox。
+- 編輯器主體新增 `#note-meta` bar（預設 `hidden`），內含 `#pin-button`、`#archive-button`、`#emotion-select`。
+- CSS / JS 版本號從 `v=2` 升至 `v=3`（強制瀏覽器重新載入靜態資源）。
+
+#### `src/static/styles.css`
+
+新增以下樣式：
+
+| 類別 | 說明 |
+|------|------|
+| `.sidebar-search` | 搜尋列容器，位於側邊欄 header 下方 |
+| `.search-input` | 搜尋輸入框樣式 |
+| `.archived-toggle` | 「Show archived」checkbox label 樣式 |
+| `.note-meta` | note-meta bar 容器（flex，wrap） |
+| `.meta-button` / `.meta-button.active` | Pin / Archive 按鈕；active 時以 accent 色填充 |
+| `.emotion-label` / `.emotion-select` | Mood 下拉標籤與選單 |
+| `.note-item.is-pinned` | 釘選筆記標題前加 📌 前綴 |
+| `.note-item.is-archived` | 封存筆記半透明（`opacity: 0.5`）並加 🗂 後綴 |
+
+RWD 斷點（`max-width: 760px`）加入 `.note-meta` 縮排與 `.emotion-label` 靠左調整。
+
+#### `src/static/app.js`
+
+- 新增 DOM 引用：`noteMeta`、`pinButton`、`archiveButton`、`emotionSelect`、`searchInput`、`showArchivedCheckbox`。
+- 新增 `setMetaVisible(visible)` — 切換 `#note-meta` 的 `hidden` 屬性。
+- 新增 `setMetaState({is_pinned, is_archived, emotion})` — 同步更新按鈕文字、active class、下拉選單值。
+- `withAuth(path, extraParams)` — 新增 `extraParams` 參數，將物件序列化為 query string 附加至 URL。
+- 新增 `buildListParams()` — 讀取搜尋列與 checkbox 狀態，組成 `{q, include_archived}` 物件傳給 `withAuth`。
+- `renderSidebar()` — 改用 `buildListParams()` 組 URL；list item 依 `note.is_pinned` / `note.is_archived` 加上對應 CSS class。
+- 新增 `patchCurrentNote(fields)` — 對當前筆記送出 PATCH 請求，更新後同步 meta state 與側邊欄；封存後自動清空編輯器。
+- `getEditorPayload()` — 加入 `emotion` 欄位（有值才附加）。
+- `loadNote()` / `saveNote()` — 呼叫 `setMetaVisible(true)` + `setMetaState(...)` 更新 meta bar。
+- `clearEditor()` — 呼叫 `setMetaVisible(false)` + `setMetaState()` 重置 meta bar。
+- 新增事件監聽：`pinButton`、`archiveButton`（呼叫 `patchCurrentNote`）、`searchInput`（300 ms debounce → `renderSidebar`）、`showArchivedCheckbox`（→ `renderSidebar`）。
+
+---
 
 ### Commit 1 — 靜態前端 + 資料庫自動初始化
 

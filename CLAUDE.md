@@ -43,9 +43,9 @@ src/
   services/
     note_service.py     # Business logic and DB queries; raises HTTPException on 404/400
   static/
-    index.html          # Single-page frontend, served at GET /
-    app.js              # Fetch-based CRUD client; stores OAuth token in localStorage
-    styles.css          # App layout and component styles
+    index.html          # Single-page frontend, served at GET /; includes sidebar search, show-archived checkbox, and note-meta bar (pin/archive/emotion)
+    app.js              # Fetch-based CRUD client; stores OAuth token in localStorage; patchCurrentNote() for immediate pin/archive PATCH; debounced search
+    styles.css          # App layout, component styles, and visual indicators for pinned/archived notes
 ```
 
 ### Key design conventions

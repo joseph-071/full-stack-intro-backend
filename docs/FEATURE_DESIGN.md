@@ -148,3 +148,55 @@ emotion:     EmotionType | None = None  # NoteCreate / NoteUpdate
 | `test_note_read_invalid_note_date` | Pydantic 拒絕無法解析為 `date` 的字串 |
 | `test_note_create_accepts_valid_emotion` | 合法 enum 值被接受並轉為 `EmotionType` |
 | `test_note_create_rejects_invalid_emotion` | 非法 enum 值觸發 `ValidationError` |
+
+---
+
+## Frontend UI
+
+本章節說明前端（`src/static/`）為呈現 `is_pinned`、`is_archived`、`emotion`、關鍵字搜尋、封存篩選所做的設計決策。
+
+### Note-meta bar（`#note-meta`）
+
+**設計決策：預設隱藏（`hidden`），載入筆記後才顯示**
+
+- 新筆記尚未儲存時，沒有可操作的 `is_pinned` / `is_archived` 狀態，顯示 meta bar 意義不大。
+- 儲存成功（`saveNote`）或載入既有筆記（`loadNote`）後，才呼叫 `setMetaVisible(true)` 顯示。
+- 清空編輯器時（`clearEditor`）呼叫 `setMetaVisible(false)` 隱藏。
+
+---
+
+### 立即 PATCH（`patchCurrentNote`）
+
+Pin / Archive 切換採用**即時送出 PATCH**，而非等待「Save」按鈕：
+
+- 這兩個操作是狀態開關，語意上不屬於「編輯內容」，不應與 title / content 混在一起。
+- 封存後列表不應再顯示該筆記（預設 `include_archived=False`），因此封存後自動重新渲染側邊欄並清空編輯器，提供即時反饋。
+
+---
+
+### 情緒標籤（Mood dropdown）
+
+`emotion` 隨 Save 一起送出（在 `getEditorPayload()` 中附加），而非立即 PATCH：
+
+- 情緒通常是與筆記內容一同記錄的，與 pin/archive 的「狀態管理」語意不同。
+- 下拉選單值為空時不附加 `emotion` 欄位到 payload，避免意外清除既有標籤。
+
+---
+
+### 搜尋 Debounce（300 ms）
+
+`searchInput` 的 `input` 事件以 300 ms debounce 觸發 `renderSidebar()`：
+
+- 避免每個按鍵都發送一次 API 請求。
+- 300 ms 在「反應夠快」與「不造成過多請求」之間取得平衡；個人筆記規模下不需更長延遲。
+
+---
+
+### 視覺指示器（CSS）
+
+| 狀態 | 樣式 |
+|------|------|
+| 釘選（`is_pinned`） | `.note-item.is-pinned .note-title::before { content: "📌 " }` |
+| 封存（`is_archived`） | `.note-item.is-archived { opacity: 0.5 }` + `.note-title::after { content: " 🗂" }` |
+
+採用 CSS pseudo-element 而非在 JS 中直接修改文字，讓視覺邏輯與資料邏輯分離。
