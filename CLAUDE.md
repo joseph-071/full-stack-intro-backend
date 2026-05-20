@@ -25,12 +25,6 @@ Services exposed:
 - `http://localhost:5050` — pgAdmin (admin@example.com / password123)
 - `localhost:5432` — PostgreSQL
 
-**Local dev (no Docker):** copy `.env.example` to `.env`, point `DATABASE_URL` at a local Postgres instance, then:
-
-```bash
-pip install -r requirements.txt
-uvicorn src.main:app --reload
-```
 
 ## Architecture
 
@@ -67,7 +61,7 @@ src/
 | Table   | Key columns |
 |---------|-------------|
 | `users` | `user_id` (PK), `user_name`, `user_email` (unique) |
-| `notes` | `note_id` (PK), `user_id` (FK → users, CASCADE), `title`, `content`, `note_date` |
+| `notes` | `note_id` (PK), `user_id` (FK → users, CASCADE), `title`, `content`, `note_date`, `is_pinned`, `is_archived`, `emotion` |
 
 Tables are **auto-created** on application startup via `Base.metadata.create_all` called in the `on_startup` event handler in `main.py`.
 
@@ -80,7 +74,29 @@ All note endpoints require authentication — either `Authorization: Bearer <tok
 | GET | `/` | Serve frontend index.html |
 | GET | `/health` | Status check |
 | POST | `/notes` | Create note |
-| GET | `/notes` | List user's notes (desc order) |
+| GET | `/notes` | List user's notes; supports `?q=<keyword>` search and `?include_archived=true` |
 | GET | `/notes/{note_id}` | Get single note |
 | PATCH | `/notes/{note_id}` | Partial update (only provided fields) |
 | DELETE | `/notes/{note_id}` | Delete note (204) |
+
+## Planned Features
+
+Features under consideration — not yet implemented. Design rationale in `docs/FEATURE_DESIGN.md`.
+
+### Backend
+
+| # | Feature | Description | Difficulty |
+|---|---------|-------------|------------|
+| 1 | **Pagination** | `GET /notes?page=1&page_size=20` — currently returns all notes at once | Low |
+| 2 | **User CRUD API** | `/users` endpoints (create, read, update) — users are currently only auto-created via OAuth | Medium |
+| 3 | **Note tags** | Many-to-many tags table; `GET /notes?tag=work` | Medium |
+| 4 | **Alembic migrations** | Replace `metadata.create_all` with versioned schema migrations | Medium |
+| 5 | **JWT auth** | Replace demo token strings with real JWT (`python-jose`) | High |
+
+### Frontend
+
+| # | Feature | Description |
+|---|---------|-------------|
+| 6 | **Markdown preview** | Render note content as Markdown (e.g. `marked.js`) |
+| 7 | **Search bar** | Client-side real-time filter of the note list |
+| 8 | **Keyboard shortcuts** | `Ctrl+S` to save, `Ctrl+N` for new note |
