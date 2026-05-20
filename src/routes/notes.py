@@ -7,13 +7,12 @@ from src.services import note_service
 
 
 # Routers define HTTP details and delegate all CRUD work to services.
-# prefix 就是這個 router 的 base path(前綴), tags 是用來分類的
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
 @router.post("", response_model=NoteRead, status_code=status.HTTP_201_CREATED)
 def create_note(
-    payload: NoteCreate,    # title 和 content 是必填的，因為 NoteCreate 的欄位沒有預設值
+    payload: NoteCreate,
     user_id: int = Query(..., description="Simulated current user ID"),
     db: Session = Depends(get_db),
 ):
