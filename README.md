@@ -54,7 +54,7 @@ full-stack-intro-backend/
 | 資料表  | 主要欄位 |
 |---------|----------|
 | `users` | `user_id` (PK)、`user_name`、`user_email` (unique) |
-| `notes` | `note_id` (PK)、`user_id` (FK → users, CASCADE)、`title`、`content`、`note_date` |
+| `notes` | `note_id` (PK)、`user_id` (FK → users, CASCADE)、`title`、`content`、`note_date`、`is_pinned`、`is_archived`、`emotion` |
 
 > 資料表會在應用程式**啟動時自動建立**（`Base.metadata.create_all`），無需手動執行 migration。
 
@@ -82,14 +82,6 @@ docker compose logs -f backend   # 即時查看後端 log
 | pgAdmin | http://localhost:5050 （帳號：admin@example.com / password123） |
 | PostgreSQL | localhost:5432 |
 
-### 本機開發（不使用 Docker）
-
-```bash
-cp .env.example .env        # 設定 DATABASE_URL 指向本機 Postgres
-pip install -r requirements.txt
-uvicorn src.main:app --reload
-```
-
 ---
 
 ## API 端點
@@ -101,7 +93,7 @@ uvicorn src.main:app --reload
 | GET | `/` | 回傳前端 `index.html` |
 | GET | `/health` | 健康檢查 |
 | POST | `/notes` | 新增筆記 |
-| GET | `/notes` | 列出該使用者的所有筆記（依時間倒序） |
+| GET | `/notes` | 列出筆記；支援 `?q=` 關鍵字搜尋、`?include_archived=true` 顯示封存筆記 |
 | GET | `/notes/{note_id}` | 取得單筆筆記 |
 | PATCH | `/notes/{note_id}` | 部分更新（只更新有傳入的欄位） |
 | DELETE | `/notes/{note_id}` | 刪除筆記（回傳 204） |
@@ -146,6 +138,41 @@ GET /notes?user_id=1
 
 ---
 
+## 筆記欄位與搜尋功能
+
+### 新增欄位
+
+| 欄位 | 型別 | 預設值 | 說明 |
+|------|------|--------|------|
+| `is_pinned` | boolean | `false` | 釘選筆記，列表中置頂顯示 |
+| `is_archived` | boolean | `false` | 封存筆記，預設從列表隱藏 |
+| `emotion` | string / null | `null` | 情緒標籤，允許值：`happy`、`sad`、`neutral`、`excited`、`angry` |
+
+建立或更新筆記時可帶入上述欄位；未傳入時維持預設值不變（`PATCH` 使用 `exclude_unset=True`，不會覆蓋未傳入的欄位）。
+
+### 排序邏輯
+
+`GET /notes` 回傳結果依序為：
+1. 釘選筆記（`is_pinned=true`）優先
+2. 同層內依 `note_id` 降序（即建立時間由新到舊）
+
+### 關鍵字搜尋
+
+```
+GET /notes?q=<keyword>
+```
+
+對 `title` 與 `content` 做大小寫不敏感的部分比對（PostgreSQL `ILIKE`）。`q` 為空或未傳入時不套用搜尋。
+
+### 封存篩選
+
+```
+GET /notes                        # 只回傳未封存的筆記（預設）
+GET /notes?include_archived=true  # 同時回傳封存筆記
+```
+
+---
+
 ## 前端介面
 
 前端以純 HTML / CSS / JavaScript 實作，由後端直接在 `GET /` 提供（`FileResponse`），靜態資源掛載於 `/static`。
@@ -186,6 +213,39 @@ GET /notes?user_id=1
 - **`index.html`**：雙欄版面——左側筆記列表側邊欄、右側編輯器（標題 + 內容 textarea），工具列包含狀態文字與操作按鈕。
 - **`app.js`**：前端邏輯，實作筆記的 CRUD 操作，透過 `fetch` 呼叫後端 API。
 - **`styles.css`**：整體排版與元件樣式。
+
+---
+
+### Commit 3 — 筆記欄位擴充、關鍵字搜尋、測試補強
+
+**異動檔案：** `src/models/note.py`、`src/schemas/note.py`、`src/services/note_service.py`、`src/routes/notes.py`、`src/tests/test_service.py`、`src/tests/test_schemas.py`、`docs/FEATURE_DESIGN.md`（新增）
+
+#### 新增欄位
+
+- `is_pinned`（Boolean）、`is_archived`（Boolean）、`emotion`（String 50, nullable）三個欄位加入 ORM model 與所有 Pydantic schema。
+- `emotion` 使用 `EmotionType(str, Enum)` 進行驗證，合法值：`happy / sad / neutral / excited / angry`。
+
+#### 列表查詢強化（`src/services/note_service.py`、`src/routes/notes.py`）
+
+- `list_notes` 新增 `q`（關鍵字）與 `include_archived`（是否含封存）參數。
+- 排序由 `note_id.desc()` 改為 `is_pinned.desc(), note_id.desc()`，釘選筆記置頂。
+
+#### 測試（`src/tests/`）
+
+新增 6 個測試（總計 23 個，全數通過）：
+
+| 測試 | 檔案 |
+|------|------|
+| `test_update_note_updates_title_and_content` | `test_service.py` |
+| `test_list_notes_excludes_archived_by_default` | `test_service.py` |
+| `test_list_notes_with_keyword_applies_extra_filter` | `test_service.py` |
+| `test_note_read_invalid_note_date` | `test_schemas.py` |
+| `test_note_create_accepts_valid_emotion` | `test_schemas.py` |
+| `test_note_create_rejects_invalid_emotion` | `test_schemas.py` |
+
+#### 設計文件
+
+新增 `docs/FEATURE_DESIGN.md`，記錄每個功能的設計決策依據（欄位型別選擇、ILIKE vs 全文索引、向下相容策略、測試策略）。
 
 ---
 
