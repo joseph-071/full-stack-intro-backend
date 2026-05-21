@@ -97,6 +97,7 @@ docker compose logs -f backend   # 即時查看後端 log
 | GET | `/notes/{note_id}` | 取得單筆筆記 |
 | PATCH | `/notes/{note_id}` | 部分更新（只更新有傳入的欄位） |
 | DELETE | `/notes/{note_id}` | 刪除筆記（回傳 204） |
+| POST | `/images/upload` | 上傳圖片（multipart/form-data）；回傳 `{filename, url}`；需身份識別 |
 
 ---
 
@@ -185,6 +186,8 @@ GET /notes?include_archived=true  # 同時回傳封存筆記
   - **搜尋列**：即時輸入關鍵字（300 ms debounce），透過 `?q=` 參數呼叫後端過濾。
   - **顯示封存** checkbox：勾選後於請求加上 `?include_archived=true`，讓封存筆記出現在列表中。
 - **右側編輯區**：標題、內容輸入，支援新增、儲存、刪除。
+  - **Preview / Edit 切換按鈕**：將筆記內容以 Markdown 渲染後顯示（由 `marked.js` 處理），再次點擊回到編輯模式，原始 Markdown 文字不受影響。
+  - **Insert Image 按鈕**（載入筆記後顯示）：選擇圖片後上傳至後端，並在游標位置插入 `![[uuid.ext]]` 語法；Preview 時會自動解析為圖片。
 - **筆記元資料列（note-meta bar）**：載入筆記後顯示於編輯器頂部，提供：
   - **📌 Pin / Pinned** 按鈕：立即 PATCH `is_pinned`，切換釘選狀態。
   - **🗂 Archive / Archived** 按鈕：立即 PATCH `is_archived`，封存後從列表移除並清空編輯器。
@@ -205,6 +208,63 @@ GET /notes?include_archived=true  # 同時回傳封存筆記
 ---
 
 ## 本次更新紀錄
+
+### Commit 5 — Markdown 預覽 + 圖片上傳
+
+**異動檔案：** `src/routes/images.py`（新增）、`src/main.py`、`src/static/index.html`、`src/static/app.js`、`src/static/styles.css`、`src/static/marked.min.js`（新增）、`.gitignore`
+
+#### `src/routes/images.py`（全新）
+
+- 新增 `POST /images/upload` endpoint。
+- 使用 `Depends(get_current_user_id)` 驗證身份（直接重用 `notes.py` 的 auth 邏輯）。
+- MIME type 白名單（`image/jpeg`、`image/png`、`image/gif`、`image/webp`、`image/svg+xml`），不合法回傳 400。
+- 5 MB 上限，超過回傳 413。
+- 檔名以 `uuid4().hex + 副檔名` 儲存至 `src/static/uploads/{user_id}/`，回傳 `{"filename": "...", "url": "/static/uploads/{user_id}/..."}`。
+
+#### `src/main.py`
+
+- 新增 `app.include_router(images_routes.router)` 註冊圖片 router。
+
+#### `src/static/marked.min.js`（全新）
+
+- 從 jsDelivr 下載並本地打包 `marked.js`（v15），不依賴外部 CDN，容器離線也能運作。
+
+#### `src/static/index.html`
+
+- `<head>` 加入 `<script src="/static/marked.min.js"></script>`（在 `app.js` 之前）。
+- 工具列新增 `#preview-button`（Preview / Edit 切換）與 `#image-upload-label`（含隱藏的 `#image-upload-input`）。
+- 編輯器主體新增 `<div id="note-preview" class="content-preview" hidden>`（Markdown 渲染輸出區）。
+- 版本號升至 `v=4`。
+
+#### `src/static/app.js`
+
+- 新增 DOM refs：`previewButton`、`imageUploadLabel`、`imageUploadInput`、`notePreview`。
+- 新增全域狀態 `isPreviewMode = false`；於 module level 呼叫 `marked.use({ gfm: true, breaks: true })`。
+- 新增 `preprocessMarkdown(text)` — 將 `![[filename]]` 替換為 `/static/uploads/${oauthUserId}/${filename}` 後再傳入 `marked.parse()`。
+- 新增 `togglePreview()` — 切換 textarea / preview div 可見性；preview 模式下即時渲染 Markdown。
+- 新增 `insertAtCursor(textarea, text)` — 在 textarea 游標位置插入文字並維持游標。
+- `setMetaVisible(visible)` 連動 `imageUploadLabel.hidden`，確保 Insert Image 只在有效筆記載入後顯示。
+- `clearEditor()` 呼叫 `if (isPreviewMode) togglePreview()` 確保切回編輯模式。
+- `imageUploadInput` change 事件：以 `FormData` POST 至 `/images/upload`，成功後插入 `![[filename]]`；若在 preview 模式則自動切回 edit 再插入。
+
+#### `src/static/styles.css`
+
+新增以下樣式：
+
+| 類別 | 說明 |
+|------|------|
+| `.secondary-button` / `.secondary-button.active` | Preview / Insert Image 按鈕；active（preview 模式中）時以 accent 色填充 |
+| `.content-preview` | Markdown 渲染輸出區；與 `.content-input` 同寬、同 padding |
+| `.content-preview h1/h2/h3` | 標題字級與字重 |
+| `.content-preview pre` / `.content-preview code` | 程式碼區塊與行內 code 樣式 |
+| `.content-preview table / th / td` | 表格邊框與 header 背景 |
+| `.content-preview img` | 圖片最大寬度 100%、圓角 |
+
+#### `.gitignore`
+
+- 新增 `src/static/uploads/`，避免使用者上傳的圖片被提交至 git。
+
+---
 
 ### Commit 4 — 前端 UI 控件（搜尋、釘選、封存、情緒）
 
