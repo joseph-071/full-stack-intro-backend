@@ -40,12 +40,14 @@ src/
     note.py             # Pydantic schemas: NoteCreate, NoteRead, NoteUpdate, NoteListResponse
   routes/
     notes.py            # HTTP layer — OAuth dependency, thin handlers, delegates to services
+    images.py           # POST /images/upload — multipart upload, MIME whitelist, 5 MB limit, UUID filename, user-scoped storage
   services/
     note_service.py     # Business logic and DB queries; raises HTTPException on 404/400
   static/
-    index.html          # Single-page frontend, served at GET /; includes sidebar search, show-archived checkbox, and note-meta bar (pin/archive/emotion)
-    app.js              # Fetch-based CRUD client; stores OAuth token in localStorage; patchCurrentNote() for immediate pin/archive PATCH; debounced search
-    styles.css          # App layout, component styles, and visual indicators for pinned/archived notes
+    index.html          # Single-page frontend, served at GET /; includes sidebar search, show-archived checkbox, note-meta bar (pin/archive/emotion), and Preview/Insert Image controls
+    app.js              # Fetch-based CRUD client; stores OAuth token in localStorage; patchCurrentNote() for pin/archive; debounced search; togglePreview() + preprocessMarkdown() for Markdown rendering; image upload with insertAtCursor()
+    styles.css          # App layout, component styles, visual indicators for pinned/archived notes, and Markdown preview (.content-preview) styles
+    marked.min.js       # marked.js v15 bundled locally (UMD); loaded before app.js; configured with gfm+breaks
 ```
 
 ### Key design conventions
@@ -78,6 +80,7 @@ All note endpoints require authentication — either `Authorization: Bearer <tok
 | GET | `/notes/{note_id}` | Get single note |
 | PATCH | `/notes/{note_id}` | Partial update (only provided fields) |
 | DELETE | `/notes/{note_id}` | Delete note (204) |
+| POST | `/images/upload` | Upload image (multipart/form-data); returns `{filename, url}`; requires auth |
 
 ## Planned Features
 
@@ -97,6 +100,4 @@ Features under consideration — not yet implemented. Design rationale in `docs/
 
 | # | Feature | Description |
 |---|---------|-------------|
-| 6 | **Markdown preview** | Render note content as Markdown (e.g. `marked.js`) |
-| 7 | **Search bar** | Client-side real-time filter of the note list |
-| 8 | **Keyboard shortcuts** | `Ctrl+S` to save, `Ctrl+N` for new note |
+| 6 | **Keyboard shortcuts** | `Ctrl+S` to save, `Ctrl+N` for new note |
