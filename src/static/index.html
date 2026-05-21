@@ -4,7 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Notes</title>
-    <link rel="stylesheet" href="/static/styles.css?v=3" />
+    <link rel="stylesheet" href="/static/styles.css?v=4" />
+    <script src="/static/marked.min.js"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -53,6 +54,11 @@
               />
               <button class="auth-button" type="submit">Sign in</button>
             </form>
+            <button id="preview-button" class="secondary-button" type="button">Preview</button>
+            <label id="image-upload-label" class="secondary-button" title="Insert image" hidden>
+              Insert Image
+              <input id="image-upload-input" type="file" accept="image/*" hidden />
+            </label>
             <button id="save-note-button" class="primary-button" type="button">Save</button>
             <button id="delete-note-button" class="danger-button" type="button">Delete</button>
           </div>
@@ -87,9 +93,10 @@
           autocomplete="off"
         />
         <textarea id="note-content" class="content-input" placeholder="Start writing..."></textarea>
+        <div id="note-preview" class="content-preview" hidden></div>
       </main>
     </div>
 
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=4"></script>
   </body>
 </html>

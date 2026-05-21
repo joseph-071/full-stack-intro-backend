@@ -11,8 +11,12 @@ const oauthUserIdInput = document.querySelector("#oauth-user-id");
 const newNoteButton    = document.querySelector("#new-note-button");
 const saveNoteButton   = document.querySelector("#save-note-button");
 const deleteNoteButton = document.querySelector("#delete-note-button");
+const previewButton    = document.querySelector("#preview-button");
+const imageUploadLabel = document.querySelector("#image-upload-label");
+const imageUploadInput = document.querySelector("#image-upload-input");
 const titleInput       = document.querySelector("#note-title");
 const contentInput     = document.querySelector("#note-content");
+const notePreview      = document.querySelector("#note-preview");
 const editorStatus     = document.querySelector("#editor-status");
 const noteMeta         = document.querySelector("#note-meta");
 const pinButton        = document.querySelector("#pin-button");
@@ -27,6 +31,9 @@ let oauthUserId     = getInitialOAuthUserId();
 let accessToken     = getInitialAccessToken();
 const currentUserId = getInitialUserId();
 let searchDebounceTimer = null;
+let isPreviewMode   = false;
+
+marked.use({ gfm: true, breaks: true });
 
 function getInitialUserId() {
   const params = new URLSearchParams(window.location.search);
@@ -88,6 +95,37 @@ function setDeleteEnabled(enabled) {
 
 function setMetaVisible(visible) {
   noteMeta.hidden = !visible;
+  imageUploadLabel.hidden = !visible;
+}
+
+function preprocessMarkdown(text) {
+  return text.replace(
+    /!\[\[([^\]]+)\]\]/g,
+    (_, filename) => `![${filename}](/static/uploads/${oauthUserId}/${filename})`
+  );
+}
+
+function togglePreview() {
+  isPreviewMode = !isPreviewMode;
+  contentInput.hidden = isPreviewMode;
+  notePreview.hidden  = !isPreviewMode;
+  previewButton.textContent = isPreviewMode ? "Edit" : "Preview";
+  previewButton.classList.toggle("active", isPreviewMode);
+
+  if (isPreviewMode) {
+    notePreview.innerHTML = marked.parse(
+      preprocessMarkdown(contentInput.value || "")
+    );
+  }
+}
+
+function insertAtCursor(textarea, text) {
+  const start = textarea.selectionStart;
+  const end   = textarea.selectionEnd;
+  textarea.value =
+    textarea.value.slice(0, start) + text + textarea.value.slice(end);
+  textarea.selectionStart = textarea.selectionEnd = start + text.length;
+  textarea.focus();
 }
 
 function setMetaState({ is_pinned = false, is_archived = false, emotion = "" } = {}) {
@@ -99,6 +137,7 @@ function setMetaState({ is_pinned = false, is_archived = false, emotion = "" } =
 }
 
 function clearEditor(status = "New note") {
+  if (isPreviewMode) togglePreview();
   currentNoteId = null;
   titleInput.value = "";
   contentInput.value = "";
@@ -313,6 +352,34 @@ async function patchCurrentNote(fields) {
 }
 
 // — Event listeners —
+
+previewButton.addEventListener("click", togglePreview);
+
+imageUploadInput.addEventListener("change", async () => {
+  const file = imageUploadInput.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const headers = {};
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const res = await fetch("/images/upload", { method: "POST", headers, body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Upload failed (${res.status})`);
+    }
+    const { filename } = await res.json();
+    if (isPreviewMode) togglePreview();
+    insertAtCursor(contentInput, `![[${filename}]]`);
+    setStatus(`Image inserted: ${filename}`);
+  } catch (err) {
+    setStatus(err.message);
+  } finally {
+    imageUploadInput.value = "";
+  }
+});
 
 noteList.addEventListener("click", async (event) => {
   const item = event.target.closest(".note-item");

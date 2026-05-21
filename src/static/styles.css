@@ -318,6 +318,30 @@ button {
   gap: 10px;
 }
 
+.secondary-button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+  padding: 0 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.secondary-button:hover {
+  background: #eeeeec;
+  border-color: #c7c7c5;
+}
+
+.secondary-button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
 .primary-button,
 .danger-button {
   min-height: 36px;
@@ -377,6 +401,67 @@ button {
   padding: 0 clamp(20px, 5vw, 72px) 56px;
   font-size: 18px;
   line-height: 1.72;
+}
+
+.content-preview {
+  flex: 1;
+  width: min(100%, 920px);
+  margin: 0 auto;
+  padding: 0 clamp(20px, 5vw, 72px) 56px;
+  font-size: 18px;
+  line-height: 1.72;
+  overflow-y: auto;
+}
+
+.content-preview h1 { font-size: 2em;    font-weight: 760; margin: 1em 0 0.4em; }
+.content-preview h2 { font-size: 1.5em;  font-weight: 700; margin: 1em 0 0.4em; }
+.content-preview h3 { font-size: 1.25em; font-weight: 650; margin: 1em 0 0.4em; }
+
+.content-preview strong { font-weight: 760; }
+
+.content-preview pre {
+  background: #f4f4f2;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 18px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.content-preview code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.content-preview :not(pre) > code {
+  background: #f4f4f2;
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+
+.content-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.content-preview th,
+.content-preview td {
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.content-preview th {
+  background: var(--sidebar);
+  font-weight: 650;
+}
+
+.content-preview img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 8px 0;
 }
 
 .title-input:focus,

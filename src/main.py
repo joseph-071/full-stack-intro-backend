@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config.database import Base, engine
+from src.routes import images as images_routes
 from src.routes import notes
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -53,6 +54,7 @@ def health_check():
 
 # Include routers. Each router owns its own prefix and tags.
 app.include_router(notes.router)
+app.include_router(images_routes.router)
 
 # Startup instruction
 if __name__ == "__main__":
