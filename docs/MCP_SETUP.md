@@ -182,6 +182,25 @@ OBSIDIAN_VAULT=/mnt/c/Data/obsidian/joseph
 
 ---
 
+## 論文筆記 SOP
+
+### 手動記錄單篇論文
+
+在 Claude Desktop 輸入：
+
+```
+幫我記錄這篇論文：<論文標題或摘要>
+```
+
+Claude 會：
+1. 呼叫 `get_paper_preferences` 讀取你的筆記格式偏好
+2. 整理成指定格式後呼叫 `create_paper_note` 存至 Obsidian
+3. **自動呼叫 `send_slack_digest`** 將今日所有論文筆記傳送到 Slack
+
+> `create_paper_note` 的 docstring 已加入指示，Claude 存完後會自動傳 Slack，不需要額外提醒。
+
+---
+
 ## 設定每日自動搜尋（Cowork 排程任務）
 
 Claude Desktop 的 **Cowork** 功能支援排程任務。設定步驟：
