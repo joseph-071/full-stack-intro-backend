@@ -428,7 +428,15 @@ MCP Server 完全獨立，不需 Docker，筆記在 Obsidian APP 中直接可見
 | `create_session_note` | 寫入：儲存任一平台的 session 摘要至 Obsidian sessions/ |
 | `get_today_session_notes` | 讀取：取得今日所有跨平台 session notes 供 daily review 使用 |
 
-工具職責單一，Claude Desktop 可自由組合。例如使用者說「先幫我整理這篇論文再傳到 Slack」，Claude 會依序呼叫 `create_paper_note` 再呼叫 `send_slack_digest`。
+工具職責單一，Claude Desktop 可自由組合。`create_paper_note` 的 docstring 明確指示 Claude 存完後**自動呼叫 `send_slack_digest`**，不需使用者額外提醒——這使「記錄論文」成為一個完整的原子操作（存檔 + 通知）。
+
+#### 為何 `create_paper_note` 自動觸發 Slack（而非讓使用者手動呼叫）
+
+手動工作流程中，使用者說「幫我記錄這篇論文」後，Claude 只知道呼叫 `create_paper_note`；若要傳 Slack，使用者還需再說一句「傳到 Slack」，容易遺漏。
+
+解法：在 `create_paper_note` 的 docstring 加入「存完後自動呼叫 send_slack_digest」指示。Claude 讀到 docstring 就知道這個工具的完整 SOP 包含兩步，不需使用者重複說明。
+
+Cowork 排程任務中仍保留明確的步驟 5（`呼叫 send_slack_digest`），避免排程環境與 docstring 行為不一致導致雙重傳送——Claude 不會因為 docstring 已有指示就忽略 prompt 中的明確指令。
 
 ---
 
