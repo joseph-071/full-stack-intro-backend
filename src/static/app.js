@@ -253,6 +253,11 @@ async function loadNote(noteId) {
     currentNoteId    = note.note_id;
     titleInput.value = note.title;
     contentInput.value = note.content;
+    if (!isPreviewMode) {
+      togglePreview();
+    } else {
+      notePreview.innerHTML = marked.parse(preprocessMarkdown(contentInput.value || ""));
+    }
     setDeleteEnabled(true);
     setMetaVisible(true);
     setMetaState({

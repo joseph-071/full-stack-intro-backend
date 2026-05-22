@@ -373,3 +373,326 @@ function setMetaVisible(visible) {
 
 未載入任何筆記時，`user_id` 情境尚不確定（新筆記尚未儲存、剛開啟頁面）。
 將 Insert Image 與 note-meta bar 一起隱藏，確保使用者只在有效筆記存在時才能上傳，避免產生孤立的、無法在任何筆記中引用的圖片。
+
+---
+
+## MCP Integration
+
+本章節說明透過 MCP（Model Context Protocol）Server 將 Claude Desktop 與筆記系統串接的設計依據。
+
+> **架構說明（2026-05）**：MCP Server 已從本後端專案**移出**，建立為獨立目錄 `~/claude/mcp/`。
+> 筆記直接寫成本地 `.md` 檔案存入 Obsidian vault（`/mnt/c/Data/obsidian/joseph/`），**不再依賴 Docker 後端**。
+> 原先的 HTTP 呼叫架構已廢棄。詳見 `docs/MCP_SETUP.md`。
+
+### 為何選用 MCP 而非 Anthropic API call
+
+| 方案 | 費用 | 說明 |
+|------|------|------|
+| Anthropic API（付費） | 按 token 計費 | 每次 AI 互動都有成本 |
+| Claude Desktop + MCP | 訂閱制，無額外費用 | Claude Desktop 已包含使用量，MCP 工具呼叫不另計費 |
+
+選擇 Claude Desktop + MCP。理由：個人筆記場景下 AI 互動頻率高，API 計費會累積；Claude Desktop 訂閱已含使用量，透過 MCP 讓 Claude Desktop 呼叫本機是零邊際成本的方案。
+
+---
+
+### 為何 MCP Server 移出後端專案、不依賴 Docker
+
+MCP Server 的工具（論文筆記、每日 review）本質上是個人 `.md` 檔的讀寫，與後端的多用戶 DB 沒有關係。每次使用 MCP 都要先 `docker compose up` 是不必要的耦合。
+
+新架構：
+
+```
+Claude Desktop (本機)
+    │ stdio subprocess
+    ▼
+~/claude/mcp/mcp_notes_server.py
+    │ 直接寫 .md 檔
+    ▼
+/mnt/c/Data/obsidian/joseph/papers/        ← 論文筆記
+/mnt/c/Data/obsidian/joseph/daily-reviews/ ← 每日 review
+```
+
+MCP Server 完全獨立，不需 Docker，筆記在 Obsidian APP 中直接可見。
+
+---
+
+### 工具職責劃分
+
+| 工具 | 職責 |
+|------|------|
+| `create_paper_note` | 寫入：新增一則論文筆記為 `.md` 檔至 Obsidian papers/ |
+| `list_today_notes` | 查詢：列出今日 papers/ 及 daily-reviews/ 中的檔案 |
+| `send_slack_digest` | 推送：讀今日論文 `.md`，格式化後傳送到 Slack |
+| `create_daily_review` | 寫入：儲存當天 Claude 使用回顧至 Obsidian daily-reviews/ |
+| `get_paper_preferences` | 讀取：從 `paper_preferences.md` 取得搜尋偏好 |
+| `create_session_note` | 寫入：儲存任一平台的 session 摘要至 Obsidian sessions/ |
+| `get_today_session_notes` | 讀取：取得今日所有跨平台 session notes 供 daily review 使用 |
+
+工具職責單一，Claude Desktop 可自由組合。例如使用者說「先幫我整理這篇論文再傳到 Slack」，Claude 會依序呼叫 `create_paper_note` 再呼叫 `send_slack_digest`。
+
+---
+
+### `create_daily_review` 工具：每日 Claude 使用回顧
+
+#### 為何自動帶日期而非讓使用者指定標題
+
+`create_daily_review` 的標題固定為 `Daily Review — YYYY-MM-DD`，由工具內部用 `date.today()` 生成，使用者不需要傳入 `title` 參數。
+
+理由：每日 review 的主鍵是日期，不是自由文字標題；固定格式讓筆記列表中的 review 可一眼辨識，也避免同一天產生格式不一的重複 review。
+
+#### 與 `create_paper_note` 的差異
+
+| 工具 | 適用情境 | 標題來源 |
+|------|---------|---------|
+| `create_paper_note` | 記錄一篇論文的閱讀心得 | 使用者提供（論文原名） |
+| `create_daily_review` | 記錄當天 Claude 使用的高層次摘要 | 自動生成（`Daily Review — YYYY-MM-DD`） |
+
+Docstring 中的格式範例讓 Claude 知道 `summary` 應包含哪些章節（今日摘要、主要決策、學到的事、明日跟進），即使使用者只說「幫我記錄今天」，Claude 也能自動套用格式。
+
+---
+
+### `get_paper_preferences` 工具與 `paper_preferences.md`
+
+#### 為何用獨立 Markdown 檔案而非直接寫死在 prompt 裡
+
+| 方案 | 優點 | 缺點 |
+|------|------|------|
+| 直接在 Cowork prompt 寫偏好 | 無需額外工具 | 每次改偏好需重新編輯 Cowork prompt；不易版本管理 |
+| 獨立 `paper_preferences.md` | 一個地方管理；可 git 追蹤；人類可讀 | 需要 `get_paper_preferences` 工具讀取 |
+
+選擇獨立 Markdown 檔案。Claude Desktop 的 Cowork prompt 是一次性設定，改動不方便；`paper_preferences.md` 是普通文字檔，用任何編輯器即可修改，且與程式碼一起受 git 管理，可追蹤偏好的演變歷程。
+
+#### 為何用 Markdown 格式而非 JSON/YAML
+
+Markdown 的 `##` 章節和 `-` 列表對人類最直覺，且不需要嚴格的格式語法（少了逗號不會 parse error）。`get_paper_preferences` 直接把整個檔案當字串回傳給 Claude，Claude 理解自然語言結構遠比解析 JSON key 更可靠。
+
+#### 路徑解析：`Path(__file__).parent / "paper_preferences.md"`
+
+```python
+prefs_path = Path(__file__).parent / "paper_preferences.md"
+```
+
+MCP Server 被 Claude Desktop 啟動時，working directory 可能是任意路徑（通常是 Claude Desktop 的安裝目錄）。用 `__file__` 取得腳本自身位置，再以 `.parent` 往上一層，確保無論在哪裡啟動都能找到正確路徑。
+
+---
+
+### `.env` 的 `override=True`：WSL + Windows 環境變數問題
+
+```python
+load_dotenv(Path(__file__).parent / ".env", override=True)
+```
+
+Claude Desktop on Windows 在 `claude_desktop_config.json` 的 `env` 區塊設定環境變數，然後啟動 `wsl python3 ...`。WSL 啟動的 subprocess 繼承 Windows 傳入的環境變數。若 `SLACK_WEBHOOK_URL: ""` 出現在 config 的 env 中，`os.environ` 裡就已有該 key（值為空字串）。
+
+預設的 `load_dotenv()` **不覆蓋**已存在的環境變數，導致 `.env` 中的真實 URL 被空字串遮蓋。加上 `override=True` 後，`.env` 的值永遠取得優先權，`.env` 成為唯一真實來源，config 中的 env 區塊只作為文件說明用途。
+
+---
+
+## Slack Digest
+
+本章節說明 Slack 每日摘要傳送功能的設計依據（`mcp_notes_server.py` 中的 `send_slack_digest`）。
+
+### 為何用 Incoming Webhook 而非 Slack Bot
+
+| 方案 | 設定複雜度 | 說明 |
+|------|-----------|------|
+| Incoming Webhook | 低 | 只需一個 URL，不需 Bot Token、OAuth 流程 |
+| Slack Bot（Bolt SDK） | 中 | 需建立 Bot、管理 Token、處理事件訂閱 |
+
+選擇 Incoming Webhook。理由：本功能只需「傳送訊息」，不需「接收訊息」或「回應互動」；Webhook 是最輕量的單向推送方案，無需額外 SDK。
+
+---
+
+### 為何不做 PDF 轉換（Slack 版本）
+
+Slack 原生支援 **mrkdwn** 格式，可在訊息中直接呈現粗體、程式碼區塊、列表等 Markdown 元素，無需轉換為 PDF。PDF 只在 LINE 等不支援富文字的管道才有必要（LINE 版本為未來擴充項目）。
+
+---
+
+### 為何不做自動排程
+
+| 方案 | 適用條件 |
+|------|---------|
+| APScheduler / cron | 系統 24/7 常駐 |
+| 手動觸發（MCP 工具） | 系統按需啟動 |
+
+本系統以 `docker compose up` 按需啟動，固定時間 cron 在容器未啟動時會靜默失敗。改為 MCP 工具手動觸發：使用者說「傳今日摘要到 Slack」即立即執行，UX 更直覺，且不依賴系統常駐。
+
+---
+
+### Slack Webhook 放在 MCP Server 而非後端
+
+Slack Webhook URL 是「使用者個人工作流程設定」，屬於客戶端配置，不應進入後端的業務邏輯。若放在後端，每個使用者要用不同 Webhook URL 就需要 DB 欄位、API 端點等額外設計。
+
+放在 MCP Server 的環境變數中，設定隔離、修改不需重建 Docker image，也讓後端保持 content-agnostic。
+
+---
+
+### Slack Block Kit 訊息結構
+
+```
+[header block]  📚 Daily Paper Digest — YYYY-MM-DD
+[divider]
+[section block] *1. 論文標題*
+                內容前 500 字預覽...
+[divider]
+[section block] *2. 論文標題*
+                ...
+[divider]
+```
+
+使用 Block Kit 而非純文字的原因：Block Kit 支援 header 元素（大字標題）、分隔線，視覺層次更清晰；且 Slack 的 mrkdwn 在 section block 中完整支援，筆記中的 `**bold**`、`` `code` ``、`- list` 均能正確渲染。
+
+---
+
+## Cross-Platform Session Notes
+
+本章節說明跨平台 session note 功能的設計依據（`~/claude/mcp/mcp_notes_server.py`）。
+
+### 為何需要跨平台 session note
+
+Claude Desktop 的 `create_daily_review` 只能看到**當前對話 context**，無法感知 Claude Code、Claude Web 等其他 session 發生的事。使用者每天可能在多個平台工作：Claude Code 做工程任務、Claude Web 討論設計、Desktop 查論文——這些 context 完全隔離，無法自動合併。
+
+解法：在各平台 session 結束時，呼叫 `create_session_note` 存一則高層次摘要到 Obsidian。Desktop 做 daily review 前呼叫 `get_today_session_notes` 讀入這些紀錄，再一起整理。
+
+---
+
+### `create_session_note` 的 append 行為
+
+同一天、同一 source 重複呼叫時，內容**追加**（append）而非覆寫，以 `---` 分隔。
+
+理由：Claude Code session 可能在一天內分多次短暫開啟（早上做 A、下午做 B），每次結束都存一次。若覆寫，只保留最後一次的摘要，早上的工作消失。Append 讓所有 session 累積在同一個日期檔案中，review 時可看到完整的一天。
+
+---
+
+### `source` 參數用 `str` 而非 Enum
+
+`source` 設計為自由字串（如 `"claude-code"`、`"claude-web"`、`"claude-desktop"`），而非固定 Enum。
+
+理由：未來可能有新平台（如 Claude Mobile、IDE plugin）；Enum 每次新增值都需要改程式碼並重啟 Claude Desktop。自由字串讓使用者自定義來源標識，不需動程式碼。
+
+---
+
+### 為何存 `sessions/` 而非 `daily-reviews/`
+
+`daily-reviews/` 是最終整理好的當日回顧（高品質、一份），`sessions/` 是各平台的原始摘要（多份、可能格式不一致）。語意分開後：
+- Obsidian 中可分開瀏覽
+- 後端網頁同步時可分別處理（session notes 也能單獨查看）
+- 不會讓 daily review 被中間草稿污染
+
+---
+
+### `get_today_session_notes` 與 `create_daily_review` 的協作
+
+```
+使用者說「記錄今天的 daily review」
+    ↓
+Claude 呼叫 get_today_session_notes()
+    ↓ 回傳今日各平台 session 摘要
+Claude 結合當前對話 + session notes，整理出完整 summary
+    ↓
+Claude 呼叫 create_daily_review(summary=...)
+    ↓
+Obsidian daily-reviews/daily-review-YYYY-MM-DD.md
+```
+
+Claude 負責「理解與合併」，工具只負責「讀」和「寫」，符合 MCP 工具單一職責原則。
+
+---
+
+## Obsidian → Backend Sync
+
+本章節說明 `docker compose up` 時自動同步 Obsidian 筆記到後端 DB 的設計依據（`src/main.py`）。
+
+### 問題
+
+MCP 筆記存在 Obsidian vault（Windows 本地 `.md` 檔），後端 PostgreSQL 完全不知道這些檔案的存在。使用者想在後端網頁系統（`http://localhost:8000`）也能瀏覽論文筆記和 daily review。
+
+### 方案選擇：啟動時 import
+
+| 方案 | 優點 | 缺點 |
+|------|------|------|
+| 啟動時 import（本方案） | 零額外服務；每次 `compose up` 自動執行 | 只在啟動時同步，中途新增的筆記要重啟才看到 |
+| 雙向即時同步（inotify/watchdog） | 即時 | 需要常駐 watchdog process；複雜度高 |
+| 獨立同步 API（`POST /obsidian/sync`） | 可手動觸發 | 使用者需記得呼叫 |
+
+選啟動時 import。理由：後端是按需啟動的（`docker compose up`），啟動時同步是最自然的時機。使用者結束一天工作後隔天啟動後端，就能看到昨天的所有 MCP 筆記。
+
+### 去重策略：title-based
+
+去重以「同 user_id + 同 title」判斷是否已存在，已存在則 skip，不覆寫。
+
+選 title 而非新增 `source_file` 欄位的理由：
+- 不需要 DB schema 變更（現有專案無 Alembic，`create_all` 不會 ALTER 既有表）
+- papers/daily-reviews/sessions 的標題都是結構化唯一字串（`Daily Review — YYYY-MM-DD`、論文原名），碰撞機率極低
+- 保持最小異動原則
+
+### Docker volume mount 用 read-only
+
+```yaml
+- /mnt/c/Data/obsidian/joseph:/app/obsidian:ro
+```
+
+`ro`（read-only）確保容器內的程式碼無法意外修改 Obsidian 檔案。import 邏輯是單向的（Obsidian → DB），不需要寫入權限。
+
+### user_id=1 Bootstrap
+
+Obsidian 筆記屬於 `google:user:1`（個人使用）。啟動時若 user_id=1 不存在（全新 DB），同步函式直接建立：
+
+```python
+User(user_id=1, user_name="Google User 1", user_email="google-1@oauth.local")
+```
+
+這與 `src/routes/notes.py:30` 的 `ensure_oauth_user(db, provider="google", user_id=1)` 邏輯完全一致：相同的 `user_name` 格式和 `user_email` 格式，確保後續 OAuth 登入不會產生衝突（`ensure_oauth_user` 在 user 已存在時直接 return）。
+
+---
+
+## Preview 預設開啟 + 切換筆記 Bug 修正
+
+本章節說明將 Preview 設為預設狀態，以及修正切換筆記時 preview 卡住的設計依據（`src/static/app.js`）。
+
+### Bug 根本原因
+
+`loadNote()` 呼叫後更新了 `contentInput.value`，但沒有處理 `isPreviewMode = true` 時的 preview 重新渲染。
+
+使用者操作流程：
+
+```
+點擊筆記 A → loadNote(A) → contentInput.value = A.content
+↓ 點擊 Preview → isPreviewMode = true，notePreview.innerHTML = A 的 HTML
+↓ 點擊筆記 B → loadNote(B) → contentInput.value = B.content
+               ↑ 但 notePreview 仍顯示 A 的 HTML！（bug）
+```
+
+`clearEditor()`（新建筆記）有做 `if (isPreviewMode) togglePreview()`，
+所以新建不會卡，但切換既有筆記會卡。
+
+### 修正方式：在 `loadNote()` 統一管理 preview 狀態
+
+```javascript
+// 在 contentInput.value = note.content 之後
+if (!isPreviewMode) {
+  togglePreview();         // edit → preview（實現預設 preview）
+} else {
+  notePreview.innerHTML = marked.parse(preprocessMarkdown(contentInput.value || ""));
+  // preview → 用新筆記內容重新渲染（修 bug）
+}
+```
+
+兩個分支涵蓋所有情況，無論當前狀態為何，切換完成後都保持 preview 狀態並顯示正確內容。
+
+### 為何 Preview 設為預設
+
+| 狀態 | 適合情境 |
+|------|---------|
+| Edit（舊預設） | 開啟筆記後立即編輯 |
+| Preview（新預設） | 開啟筆記後先閱讀，需要修改才切 edit |
+
+個人筆記的主要操作是**閱讀**（回顧、查找），而非每次點開都要編輯。
+Preview 預設讓 Markdown 格式（標題、程式碼、表格）立即可讀，
+Edit 作為手動切換的動作，明確表達「我現在要修改這則筆記」的意圖。
+
+### `clearEditor` 不需改動的原因
+
+新建筆記時 `clearEditor()` 的 `if (isPreviewMode) togglePreview()` 自動切回 edit mode，
+讓使用者可以直接輸入標題和內容，行為符合直覺（新建 = 編輯狀態）。

@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - /mnt/c/Data/obsidian/joseph:/app/obsidian:ro
     environment:
       # 這裡的帳密與資料庫名需與下方 postgres 一致
       - DATABASE_URL=postgresql://admin:password123@postgres:5432/notes_db

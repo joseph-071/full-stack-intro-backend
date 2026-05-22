@@ -186,7 +186,7 @@ GET /notes?include_archived=true  # 同時回傳封存筆記
   - **搜尋列**：即時輸入關鍵字（300 ms debounce），透過 `?q=` 參數呼叫後端過濾。
   - **顯示封存** checkbox：勾選後於請求加上 `?include_archived=true`，讓封存筆記出現在列表中。
 - **右側編輯區**：標題、內容輸入，支援新增、儲存、刪除。
-  - **Preview / Edit 切換按鈕**：將筆記內容以 Markdown 渲染後顯示（由 `marked.js` 處理），再次點擊回到編輯模式，原始 Markdown 文字不受影響。
+  - **Preview / Edit 切換按鈕**：載入筆記時**預設以 Preview 狀態顯示**（Markdown 渲染，由 `marked.js` 處理）；點擊「Edit」切換到編輯模式，再次點擊「Preview」回到渲染視圖，原始 Markdown 文字不受影響。新建筆記時自動切回 edit mode。
   - **Insert Image 按鈕**（載入筆記後顯示）：選擇圖片後上傳至後端，並在游標位置插入 `![[uuid.ext]]` 語法；Preview 時會自動解析為圖片。
 - **筆記元資料列（note-meta bar）**：載入筆記後顯示於編輯器頂部，提供：
   - **📌 Pin / Pinned** 按鈕：立即 PATCH `is_pinned`，切換釘選狀態。
@@ -208,6 +208,34 @@ GET /notes?include_archived=true  # 同時回傳封存筆記
 ---
 
 ## 本次更新紀錄
+
+### Commit 6 — Preview 預設開啟 + 切換筆記 Bug 修正
+
+**異動檔案：** `src/static/app.js`
+
+#### Bug 修正：切換筆記時 preview 卡住
+
+在 preview 模式下點擊側邊欄其他筆記，preview 區塊會繼續顯示舊筆記的 HTML（新筆記內容已載入 textarea 但被舊 preview 遮住）。
+
+根本原因：`loadNote()` 更新 `contentInput.value` 後未重新渲染 preview。
+
+修正：在 `loadNote()` 的 `contentInput.value = note.content` 之後加入 preview 狀態處理：
+
+```javascript
+if (!isPreviewMode) {
+  togglePreview();   // edit → preview（同時實現預設 preview）
+} else {
+  notePreview.innerHTML = marked.parse(preprocessMarkdown(contentInput.value || ""));
+  // 重新渲染（修 bug）
+}
+```
+
+#### 新行為：Preview 設為預設狀態
+
+點擊側邊欄任意筆記，直接以 **Preview**（Markdown 渲染）狀態顯示。
+需要編輯時點擊「Edit」手動切換，新建筆記仍自動切回 edit mode（`clearEditor` 行為不變）。
+
+---
 
 ### Commit 5 — Markdown 預覽 + 圖片上傳
 
